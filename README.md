@@ -12,6 +12,10 @@ The built-in task drawer lists attachments as download links. This plugin adds a
 
 ![Text preview](docs/preview-text.png)
 
+Word documents render as a readable page, including headings, lists, tables, links and embedded images:
+
+![Word document preview](docs/preview-docx.png)
+
 ## Features
 
 - **Images** (PNG, JPEG, GIF, WebP, AVIF, BMP, SVG), **PDF**, **audio**, **video**, **text** (logs, JSON, YAML, CSV, Markdown, source code and more), and **Word (.docx)** documents.
