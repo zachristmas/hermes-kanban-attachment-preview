@@ -114,3 +114,5 @@
 .kap-doc td { border: 1px solid #bbb; padding: 0.3em 0.6em; vertical-align: top; }
 .kap-doc img { max-width: 100%; height: auto; }
 .kap-zoom .kap-btn:not(.kap-zoom-val) { font-size: 1rem; line-height: 1; min-width: 1.9rem; padding: 0.1rem 0.4rem; }
+.kap-when { font-size: 0.7rem; color: var(--color-muted-foreground); white-space: nowrap; }
+.kap-when.kap-newest { color: var(--color-foreground); }

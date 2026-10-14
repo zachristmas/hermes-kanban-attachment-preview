@@ -1,5 +1,5 @@
 name: kanban-attachment-preview
-version: "1.3.0"
+version: "1.4.0"
 description: "Preview images, PDFs, audio, video and text attachments on kanban tasks from the dashboard."
 author: Zach Christmas
 license: MIT

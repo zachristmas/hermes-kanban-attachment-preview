@@ -8,6 +8,8 @@ The built-in task drawer lists attachments as download links. This plugin adds a
 
 ![Preview buttons on each attachment row](docs/attachments.png)
 
+![Upload time on each attachment row](docs/attachment-dates.png)
+
 ![Image preview](docs/preview-image.png)
 
 ![Text preview](docs/preview-text.png)
@@ -19,6 +21,7 @@ Word documents render as a readable page, including headings, lists, tables, lin
 ## Features
 
 - **Images** (PNG, JPEG, GIF, WebP, AVIF, BMP, SVG), **PDF**, **audio**, **video**, **text** (logs, JSON, YAML, CSV, Markdown, source code and more), and **Word (.docx)** documents.
+- **Upload time** on every attachment row ("17h ago", or the date once older than a week), with the full date and uploader in the tooltip, plus a "newest" marker on the most recent upload. The preview header also shows the full upload date.
 - **Prev / next** across all of a task's attachments, with ← / → keys.
 - **Download** button in the modal.
 - **Esc closes the preview only**, not the drawer behind it.

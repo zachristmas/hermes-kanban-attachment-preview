@@ -89,3 +89,22 @@ test("textutil/Pages-style docx (direct formatting) still shows its text", async
   await expect(page.getByTestId("kap-docx")).toContainText("Quarterly Plan");
   await expect(page.getByTestId("kap-docx")).toContainText("Owner"); // textutil flattens tables to paragraphs
 });
+
+test("attachment rows show upload time; newest is marked; tooltip has full date", async ({ page }) => {
+  await openDrawer(page);
+  const whens = page.getByTestId("kap-when");
+  await expect(whens.first()).toBeVisible();
+  const n = await page.getByTestId("kap-open").count();
+  await expect(whens).toHaveCount(n);
+  // relative text, or a date once older than a week
+  await expect(whens.first()).toHaveText(/ago|just now|\d{4}/);
+  await expect(whens.first()).toHaveAttribute("title", /^Uploaded /);
+  // exactly one row is marked newest, and it has the max created_at
+  await expect(page.locator('[data-testid="kap-when"][data-newest="true"]')).toHaveCount(1);
+  const stamps = await whens.evaluateAll((els) => els.map((e) => ({ t: +e.getAttribute("data-created-at"), n: e.getAttribute("data-newest") === "true" })));
+  const max = Math.max(...stamps.map((s) => s.t));
+  expect(stamps.find((s) => s.n).t).toBe(max);
+  // modal header carries the full upload date
+  await page.getByTestId("kap-open").first().click();
+  await expect(page.locator(".kap-meta")).toContainText("uploaded ");
+});

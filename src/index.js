@@ -63,6 +63,32 @@ import { docxToElement } from "./docx.js";
     return e ? e.toUpperCase() + " file" : "unknown type";
   }
 
+  // created_at is unix seconds. Short relative text for rows, full local date for tooltips.
+  function fmtWhen(ts) {
+    if (!(ts > 0)) return "";
+    const d = new Date(ts * 1000);
+    return d.toLocaleString(undefined, { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  }
+
+  function fmtAgo(ts, nowMs) {
+    if (!(ts > 0)) return "";
+    const s = Math.max(0, Math.round(((nowMs == null ? Date.now() : nowMs) / 1000) - ts));
+    if (s < 60) return "just now";
+    if (s < 3600) return Math.floor(s / 60) + "m ago";
+    if (s < 86400) return Math.floor(s / 3600) + "h ago";
+    if (s < 7 * 86400) return Math.floor(s / 86400) + "d ago";
+    return new Date(ts * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  }
+
+  // The most recently uploaded attachment (ties: highest id).
+  function newestOf(list) {
+    let best = null;
+    list.forEach(function (a) {
+      if (!best || a.created_at > best.created_at || (a.created_at === best.created_at && a.id > best.id)) best = a;
+    });
+    return best;
+  }
+
   function fmtBytes(n) {
     if (!(n >= 0)) return "";
     if (n < 1024) return n + " B";
@@ -188,7 +214,7 @@ import { docxToElement } from "./docx.js";
       state.blob = null;
       title.textContent = att.filename;
       title.title = att.filename;
-      meta.textContent = typeLabel(att, kindOf(att)) + " · " + fmtBytes(att.size) + " · " + (i + 1) + "/" + list.length;
+      meta.textContent = typeLabel(att, kindOf(att)) + " · " + fmtBytes(att.size) + (att.created_at ? " · uploaded " + fmtWhen(att.created_at) : "") + " · " + (i + 1) + "/" + list.length;
       prev.disabled = i === 0;
       next.disabled = i === list.length - 1;
       const kind = kindOf(att);
@@ -269,6 +295,39 @@ import { docxToElement } from "./docx.js";
     return s ? s.textContent.trim() : "";
   }
 
+  // Fill in upload times for rows that lack one. Rows are matched to the list by filename + size.
+  function stampDates(drawer, taskId) {
+    const rows = Array.prototype.filter.call(drawer.querySelectorAll(".hermes-kanban-attachment-link"), function (link) {
+      return link.parentElement && !link.parentElement.querySelector(":scope > .kap-when");
+    });
+    if (!rows.length || drawer.__kapStamping) return;
+    drawer.__kapStamping = true;
+    loadList(taskId, true).then(function (list) {
+      const newest = list.length > 1 ? newestOf(list) : null;
+      rows.forEach(function (link) {
+        const row = link.parentElement;
+        if (!row || row.querySelector(":scope > .kap-when")) return;
+        const sizeEl = link.nextElementSibling;
+        const att = findAtt(list, link.title || link.textContent, sizeEl ? sizeEl.textContent.trim() : "");
+        const when = el("span", "kap-when", att ? fmtAgo(att.created_at) : "");
+        when.setAttribute("data-testid", "kap-when");
+        if (att && att.created_at) {
+          when.title = "Uploaded " + fmtWhen(att.created_at) + (att.uploaded_by ? " by " + att.uploaded_by : "");
+          when.setAttribute("data-created-at", String(att.created_at));
+          if (newest && att.id === newest.id) {
+            when.classList.add("kap-newest");
+            when.setAttribute("data-newest", "true");
+            when.textContent += " · newest";
+          }
+        }
+        const btn = row.querySelector(":scope > .kap-btn");
+        if (btn) btn.insertAdjacentElement("beforebegin", when); else (sizeEl || link).insertAdjacentElement("afterend", when);
+      });
+    }).catch(function () {
+      // Leave rows undated; the Preview button still works.
+    }).finally(function () { drawer.__kapStamping = false; });
+  }
+
   function decorate() {
     document.querySelectorAll(".hermes-kanban-drawer").forEach(function (drawer) {
       const taskId = taskIdOf(drawer);
@@ -298,6 +357,7 @@ import { docxToElement } from "./docx.js";
           }).finally(function () { btn.disabled = false; });
         });
       });
+      stampDates(drawer, taskId);
     });
   }
 
