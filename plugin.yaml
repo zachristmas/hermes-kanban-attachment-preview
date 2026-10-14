@@ -1,0 +1,7 @@
+name: kanban-attachment-preview
+version: "1.0.0"
+description: "Preview images, PDFs, audio, video and text attachments on kanban tasks from the dashboard."
+author: Zach Christmas
+# Dashboard-only plugin: all behavior lives in dashboard/. No agent tools or hooks.
+provides_tools: []
+provides_hooks: []

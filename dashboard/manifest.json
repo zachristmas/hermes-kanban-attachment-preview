@@ -1,0 +1,14 @@
+{
+  "name": "kanban-attachment-preview",
+  "label": "Kanban Attachment Preview",
+  "description": "Preview images, PDFs, audio, video and text attachments on kanban tasks without downloading them",
+  "icon": "Package",
+  "version": "1.0.0",
+  "tab": {
+    "path": "/kanban-attachment-preview",
+    "position": "end",
+    "hidden": true
+  },
+  "entry": "dist/index.js",
+  "css": "dist/style.css"
+}
