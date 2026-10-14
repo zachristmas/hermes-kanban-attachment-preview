@@ -46,6 +46,8 @@ test("word document (.docx) renders as formatted text, not raw bytes", async ({ 
     await page.waitForTimeout(250);
   }
   await expect(page.locator(".kap-title")).toHaveText("report.docx");
+  await expect(page.locator(".kap-meta")).toContainText("Word document");
+  await expect(page.locator(".kap-meta")).not.toContainText("openxmlformats");
   await expect(doc).toBeVisible();
   await expect(doc.locator("h1")).toHaveText("Quarterly Plan");
   await expect(doc.locator("h2")).toHaveText("Steps");

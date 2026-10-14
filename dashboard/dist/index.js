@@ -782,6 +782,13 @@
       if (kind === "image") return ext(att.filename) === "svg" ? "image/svg+xml" : att.content_type || "";
       return att.content_type || "";
     }
+    function typeLabel(att, kind) {
+      if (kind === "docx") return "Word document";
+      const ct = att.content_type || "";
+      if (ct && ct.length <= 32) return ct;
+      const e = ext(att.filename);
+      return e ? e.toUpperCase() + " file" : "unknown type";
+    }
     function fmtBytes(n) {
       if (!(n >= 0)) return "";
       if (n < 1024) return n + " B";
@@ -886,7 +893,7 @@
         state.blob = null;
         title.textContent = att.filename;
         title.title = att.filename;
-        meta.textContent = (att.content_type || "unknown type") + " \xB7 " + fmtBytes(att.size) + " \xB7 " + (i2 + 1) + "/" + list.length;
+        meta.textContent = typeLabel(att, kindOf(att)) + " \xB7 " + fmtBytes(att.size) + " \xB7 " + (i2 + 1) + "/" + list.length;
         prev.disabled = i2 === 0;
         next.disabled = i2 === list.length - 1;
         const kind = kindOf(att);

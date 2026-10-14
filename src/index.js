@@ -54,6 +54,15 @@ import { docxToElement } from "./docx.js";
     return att.content_type || "";
   }
 
+  // Short, human type label for the modal header (Office MIME types are very long).
+  function typeLabel(att, kind) {
+    if (kind === "docx") return "Word document";
+    const ct = att.content_type || "";
+    if (ct && ct.length <= 32) return ct;
+    const e = ext(att.filename);
+    return e ? e.toUpperCase() + " file" : "unknown type";
+  }
+
   function fmtBytes(n) {
     if (!(n >= 0)) return "";
     if (n < 1024) return n + " B";
@@ -145,7 +154,7 @@ import { docxToElement } from "./docx.js";
       state.blob = null;
       title.textContent = att.filename;
       title.title = att.filename;
-      meta.textContent = (att.content_type || "unknown type") + " · " + fmtBytes(att.size) + " · " + (i + 1) + "/" + list.length;
+      meta.textContent = typeLabel(att, kindOf(att)) + " · " + fmtBytes(att.size) + " · " + (i + 1) + "/" + list.length;
       prev.disabled = i === 0;
       next.disabled = i === list.length - 1;
       const kind = kindOf(att);
