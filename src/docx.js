@@ -95,7 +95,7 @@ function renderImage(node, parent, state) {
   state.urls.push(url);
   const img = el("img");
   img.src = url; img.alt = alt; img.loading = "lazy";
-  if (width > 0 && width < 4000) img.style.width = width + "px";
+  if (width > 0 && width < 4000) img.style.width = "calc(" + width + "px * var(--kap-zoom, 1))";
   img.style.maxWidth = "100%"; img.style.height = "auto";
   parent.appendChild(img);
 }

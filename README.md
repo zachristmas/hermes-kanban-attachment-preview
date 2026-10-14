@@ -23,7 +23,7 @@ Word documents render as a readable page, including headings, lists, tables, lin
 - **Download** button in the modal.
 - **Esc closes the preview only**, not the drawer behind it.
 - Unknown file types show a clear "no preview" note with Download as the fallback.
-- Word documents render as a readable page: headings, bold/italic/underline, links, bulleted and numbered lists, tables. Embedded PNG/JPEG/GIF/WebP/BMP images are shown inline. SVG/EMF/WMF images, headers/footers, footnotes and tracked deletions are not (the modal says how many images were skipped). It is a preview, not a layout engine; Download for the real thing. Legacy `.doc`, `.xlsx` and `.pptx` get the "no preview" note.
+- Word documents render as a readable page that fits the window at a compact default zoom (75%), with **− / +** buttons (or the `-`, `+` and `0` keys) to zoom from 50% to 175%; the zoom is remembered per browser. They show: headings, bold/italic/underline, links, bulleted and numbered lists, tables. Embedded PNG/JPEG/GIF/WebP/BMP images are shown inline. SVG/EMF/WMF images, headers/footers, footnotes and tracked deletions are not (the modal says how many images were skipped). It is a preview, not a layout engine; Download for the real thing. Legacy `.doc`, `.xlsx` and `.pptx` get the "no preview" note.
 - Text previews are capped at 512 KB; the modal says so when a file is truncated.
 
 ## Install

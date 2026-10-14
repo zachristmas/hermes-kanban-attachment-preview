@@ -70,6 +70,16 @@ import { docxToElement } from "./docx.js";
     return (n / 1024 / 1024).toFixed(1) + " MB";
   }
 
+  // Word-document zoom: 1 = the base size; the default is deliberately smaller so a page fits comfortably.
+  const ZOOM_KEY = "hermes.kanban.docZoom";
+  const ZOOM_STEPS = [0.5, 0.625, 0.75, 0.875, 1, 1.25, 1.5, 1.75];
+  const ZOOM_DEFAULT = 0.75;
+  function readZoom() {
+    try { const v = parseFloat(window.localStorage.getItem(ZOOM_KEY)); if (ZOOM_STEPS.indexOf(v) >= 0) return v; } catch (_e) { /* ignore */ }
+    return ZOOM_DEFAULT;
+  }
+  function writeZoom(v) { try { window.localStorage.setItem(ZOOM_KEY, String(v)); } catch (_e) { /* ignore */ } }
+
   function board() {
     try { return (window.localStorage.getItem(LS_BOARD_KEY) || "").trim() || null; } catch (_e) { return null; }
   }
@@ -128,8 +138,14 @@ import { docxToElement } from "./docx.js";
     const next = el("button", "kap-btn", "›"); next.title = "Next attachment"; next.setAttribute("data-testid", "kap-next");
     const dl = el("button", "kap-btn", "Download"); dl.setAttribute("data-testid", "kap-download");
     const close = el("button", "kap-btn", "Close"); close.title = "Close (Esc)"; close.setAttribute("data-testid", "kap-close");
-    [prev, next, dl, close].forEach(function (b) { b.type = "button"; });
-    head.append(prev, title, meta, next, dl, close);
+    const zoomOut = el("button", "kap-btn", "−"); zoomOut.title = "Zoom out (-)"; zoomOut.setAttribute("data-testid", "kap-zoom-out");
+    const zoomVal = el("button", "kap-btn kap-zoom-val", ""); zoomVal.title = "Reset zoom (0)"; zoomVal.setAttribute("data-testid", "kap-zoom-reset");
+    const zoomIn = el("button", "kap-btn", "+"); zoomIn.title = "Zoom in (+)"; zoomIn.setAttribute("data-testid", "kap-zoom-in");
+    const zoomBox = el("span", "kap-zoom");
+    zoomBox.hidden = true;
+    zoomBox.append(zoomOut, zoomVal, zoomIn);
+    [prev, next, dl, close, zoomOut, zoomVal, zoomIn].forEach(function (b) { b.type = "button"; });
+    head.append(prev, title, meta, zoomBox, next, dl, close);
     const body = el("div", "kap-body");
     body.setAttribute("data-testid", "kap-body");
     box.append(head, body);
@@ -142,6 +158,24 @@ import { docxToElement } from "./docx.js";
     function note(text, isErr) {
       body.replaceChildren(el("div", "kap-note" + (isErr ? " kap-note-err" : ""), text));
     }
+
+    let zoom = readZoom();
+    function applyZoom(z) {
+      zoom = z; writeZoom(z);
+      body.style.setProperty("--kap-zoom", String(z));
+      zoomVal.textContent = Math.round(z * 100) + "%";
+      zoomOut.disabled = z <= ZOOM_STEPS[0];
+      zoomIn.disabled = z >= ZOOM_STEPS[ZOOM_STEPS.length - 1];
+    }
+    function stepZoom(dir) {
+      const i = ZOOM_STEPS.indexOf(zoom);
+      const n = ZOOM_STEPS[Math.max(0, Math.min(ZOOM_STEPS.length - 1, i + dir))];
+      applyZoom(n);
+    }
+    zoomOut.addEventListener("click", function () { stepZoom(-1); });
+    zoomIn.addEventListener("click", function () { stepZoom(1); });
+    zoomVal.addEventListener("click", function () { applyZoom(ZOOM_DEFAULT); });
+    applyZoom(zoom);
 
     function show(i) {
       if (i < 0 || i >= list.length) return;
@@ -158,6 +192,7 @@ import { docxToElement } from "./docx.js";
       prev.disabled = i === 0;
       next.disabled = i === list.length - 1;
       const kind = kindOf(att);
+      zoomBox.hidden = kind !== "docx";
       note("Loading…");
       SDK.authedFetch(withBoard(API + "/attachments/" + att.id))
         .then(function (resp) {
@@ -218,6 +253,9 @@ import { docxToElement } from "./docx.js";
     state.onKey = function (e) {
       // Capture phase + stopPropagation so Esc closes only the preview, not the drawer behind it.
       if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeModal(); }
+      else if (!zoomBox.hidden && (e.key === "+" || e.key === "=")) { e.preventDefault(); stepZoom(1); }
+      else if (!zoomBox.hidden && (e.key === "-" || e.key === "_")) { e.preventDefault(); stepZoom(-1); }
+      else if (!zoomBox.hidden && e.key === "0") { e.preventDefault(); applyZoom(ZOOM_DEFAULT); }
       else if (e.key === "ArrowLeft") { e.stopPropagation(); show(state.idx - 1); }
       else if (e.key === "ArrowRight") { e.stopPropagation(); show(state.idx + 1); }
     };

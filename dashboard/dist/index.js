@@ -566,7 +566,7 @@
     img.src = url;
     img.alt = alt;
     img.loading = "lazy";
-    if (width > 0 && width < 4e3) img.style.width = width + "px";
+    if (width > 0 && width < 4e3) img.style.width = "calc(" + width + "px * var(--kap-zoom, 1))";
     img.style.maxWidth = "100%";
     img.style.height = "auto";
     parent.appendChild(img);
@@ -795,6 +795,23 @@
       if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
       return (n / 1024 / 1024).toFixed(1) + " MB";
     }
+    const ZOOM_KEY = "hermes.kanban.docZoom";
+    const ZOOM_STEPS = [0.5, 0.625, 0.75, 0.875, 1, 1.25, 1.5, 1.75];
+    const ZOOM_DEFAULT = 0.75;
+    function readZoom() {
+      try {
+        const v = parseFloat(window.localStorage.getItem(ZOOM_KEY));
+        if (ZOOM_STEPS.indexOf(v) >= 0) return v;
+      } catch (_e) {
+      }
+      return ZOOM_DEFAULT;
+    }
+    function writeZoom(v) {
+      try {
+        window.localStorage.setItem(ZOOM_KEY, String(v));
+      } catch (_e) {
+      }
+    }
     function board() {
       try {
         return (window.localStorage.getItem(LS_BOARD_KEY) || "").trim() || null;
@@ -863,10 +880,22 @@
       const close = el2("button", "kap-btn", "Close");
       close.title = "Close (Esc)";
       close.setAttribute("data-testid", "kap-close");
-      [prev, next, dl, close].forEach(function(b) {
+      const zoomOut = el2("button", "kap-btn", "\u2212");
+      zoomOut.title = "Zoom out (-)";
+      zoomOut.setAttribute("data-testid", "kap-zoom-out");
+      const zoomVal = el2("button", "kap-btn kap-zoom-val", "");
+      zoomVal.title = "Reset zoom (0)";
+      zoomVal.setAttribute("data-testid", "kap-zoom-reset");
+      const zoomIn = el2("button", "kap-btn", "+");
+      zoomIn.title = "Zoom in (+)";
+      zoomIn.setAttribute("data-testid", "kap-zoom-in");
+      const zoomBox = el2("span", "kap-zoom");
+      zoomBox.hidden = true;
+      zoomBox.append(zoomOut, zoomVal, zoomIn);
+      [prev, next, dl, close, zoomOut, zoomVal, zoomIn].forEach(function(b) {
         b.type = "button";
       });
-      head.append(prev, title, meta, next, dl, close);
+      head.append(prev, title, meta, zoomBox, next, dl, close);
       const body = el2("div", "kap-body");
       body.setAttribute("data-testid", "kap-body");
       box.append(head, body);
@@ -877,6 +906,30 @@
       function note(text, isErr) {
         body.replaceChildren(el2("div", "kap-note" + (isErr ? " kap-note-err" : ""), text));
       }
+      let zoom = readZoom();
+      function applyZoom(z) {
+        zoom = z;
+        writeZoom(z);
+        body.style.setProperty("--kap-zoom", String(z));
+        zoomVal.textContent = Math.round(z * 100) + "%";
+        zoomOut.disabled = z <= ZOOM_STEPS[0];
+        zoomIn.disabled = z >= ZOOM_STEPS[ZOOM_STEPS.length - 1];
+      }
+      function stepZoom(dir) {
+        const i2 = ZOOM_STEPS.indexOf(zoom);
+        const n = ZOOM_STEPS[Math.max(0, Math.min(ZOOM_STEPS.length - 1, i2 + dir))];
+        applyZoom(n);
+      }
+      zoomOut.addEventListener("click", function() {
+        stepZoom(-1);
+      });
+      zoomIn.addEventListener("click", function() {
+        stepZoom(1);
+      });
+      zoomVal.addEventListener("click", function() {
+        applyZoom(ZOOM_DEFAULT);
+      });
+      applyZoom(zoom);
       function show(i2) {
         if (i2 < 0 || i2 >= list.length) return;
         state.idx = i2;
@@ -897,6 +950,7 @@
         prev.disabled = i2 === 0;
         next.disabled = i2 === list.length - 1;
         const kind = kindOf(att);
+        zoomBox.hidden = kind !== "docx";
         note("Loading\u2026");
         SDK.authedFetch(withBoard(API + "/attachments/" + att.id)).then(function(resp) {
           if (!resp.ok) return resp.text().then(function(t) {
@@ -989,6 +1043,15 @@
           e.preventDefault();
           e.stopPropagation();
           closeModal();
+        } else if (!zoomBox.hidden && (e.key === "+" || e.key === "=")) {
+          e.preventDefault();
+          stepZoom(1);
+        } else if (!zoomBox.hidden && (e.key === "-" || e.key === "_")) {
+          e.preventDefault();
+          stepZoom(-1);
+        } else if (!zoomBox.hidden && e.key === "0") {
+          e.preventDefault();
+          applyZoom(ZOOM_DEFAULT);
         } else if (e.key === "ArrowLeft") {
           e.stopPropagation();
           show(state.idx - 1);

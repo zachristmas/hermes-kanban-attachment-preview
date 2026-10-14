@@ -48,6 +48,18 @@ test("word document (.docx) renders as formatted text, not raw bytes", async ({ 
   await expect(page.locator(".kap-title")).toHaveText("report.docx");
   await expect(page.locator(".kap-meta")).toContainText("Word document");
   await expect(page.locator(".kap-meta")).not.toContainText("openxmlformats");
+  // default zoom is small, adjustable, and remembered
+  await expect(page.getByTestId("kap-zoom-reset")).toHaveText("75%");
+  const base = await doc.evaluate((e) => parseFloat(getComputedStyle(e).fontSize));
+  expect(base).toBeLessThan(12);
+  await page.getByTestId("kap-zoom-in").click();
+  await page.getByTestId("kap-zoom-in").click();
+  await expect(page.getByTestId("kap-zoom-reset")).toHaveText("100%");
+  expect(await doc.evaluate((e) => parseFloat(getComputedStyle(e).fontSize))).toBeGreaterThan(base * 1.25);
+  await page.keyboard.press("-");
+  await expect(page.getByTestId("kap-zoom-reset")).toHaveText("88%");
+  await page.getByTestId("kap-zoom-reset").click();
+  await expect(page.getByTestId("kap-zoom-reset")).toHaveText("75%");
   await expect(doc).toBeVisible();
   await expect(doc.locator("h1")).toHaveText("Quarterly Plan");
   await expect(doc.locator("h2")).toHaveText("Steps");
