@@ -19,7 +19,7 @@ The built-in task drawer lists attachments as download links. This plugin adds a
 - **Download** button in the modal.
 - **Esc closes the preview only**, not the drawer behind it.
 - Unknown file types show a clear "no preview" note with Download as the fallback.
-- Word documents render as a readable page: headings, bold/italic/underline, links, bulleted and numbered lists, tables. Images, headers/footers, footnotes and tracked deletions are not shown (the modal says how many images were skipped). It is a preview, not a layout engine; Download for the real thing. Legacy `.doc`, `.xlsx` and `.pptx` get the "no preview" note.
+- Word documents render as a readable page: headings, bold/italic/underline, links, bulleted and numbered lists, tables. Embedded PNG/JPEG/GIF/WebP/BMP images are shown inline. SVG/EMF/WMF images, headers/footers, footnotes and tracked deletions are not (the modal says how many images were skipped). It is a preview, not a layout engine; Download for the real thing. Legacy `.doc`, `.xlsx` and `.pptx` get the "no preview" note.
 - Text previews are capped at 512 KB; the modal says so when a file is truncated.
 
 ## Install
@@ -61,7 +61,7 @@ Attachments are untrusted content, so nothing is ever rendered as HTML:
 The E2E test runs against a **sandbox** dashboard (a throwaway `HERMES_HOME` with this plugin enabled), never a live board.
 
 1. Create a sandbox home, symlink this repo into `$HERMES_HOME/plugins/kanban-attachment-preview`, run `hermes plugins enable kanban-attachment-preview`, and start `hermes dashboard --port 9229`.
-2. Seed one task with attachments, in this order, via `hermes kanban attach`: `red.png` (a 64×64 PNG), `notes.txt` (containing "hello preview"), `doc.pdf`, `data.bin`, then `report.docx` (real Word markup: Heading1/Heading2 styles, a bold run, an external hyperlink to https://example.com/x, a numbered list with a nested bullet, a table whose first cell spans 2 columns, a tracked delete + insert, and the literal text `<script>alert(1)</script>`) and `plan.docx` (any .docx whose text contains "Quarterly Plan" and "Owner").
+2. Seed one task with attachments, in this order, via `hermes kanban attach`: `red.png` (a 64×64 PNG), `notes.txt` (containing "hello preview"), `doc.pdf`, `data.bin`, then `report.docx` (real Word markup: Heading1/Heading2 styles, a bold run, an external hyperlink to https://example.com/x, a numbered list with a nested bullet, a table whose first cell spans 2 columns, a tracked delete + insert, one 64×64 PNG (alt text "red square") and one `.emf` image, and the literal text `<script>alert(1)</script>`) and `plan.docx` (any .docx whose text contains "Quarterly Plan" and "Owner").
 3. Run:
 
 ```bash

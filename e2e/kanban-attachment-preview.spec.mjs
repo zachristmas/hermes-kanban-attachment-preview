@@ -54,6 +54,10 @@ test("word document (.docx) renders as formatted text, not raw bytes", async ({ 
   await expect(doc.locator("ol > li")).toHaveCount(2);
   await expect(doc.locator("ol > li ul li")).toHaveText("nested bullet");
   await expect(doc.locator("td").first()).toHaveAttribute("colspan", "2");
+  await expect(doc.locator("img")).toHaveCount(1); // PNG shown, EMF skipped
+  expect(await doc.locator("img").evaluate((i) => i.complete && i.naturalWidth)).toBe(64);
+  await expect(doc.locator("img")).toHaveAttribute("alt", "red square");
+  await expect(page.getByTestId("kap-body")).toContainText("1 image(s) in an unsupported format");
   await expect(doc).toContainText("inserted text");
   await expect(doc).not.toContainText("removed text");
   await expect(doc).toContainText("<script>alert(1)</script>");

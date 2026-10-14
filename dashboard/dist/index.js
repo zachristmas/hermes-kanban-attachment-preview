@@ -478,6 +478,11 @@
   var W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
   var R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
   var MAX_PART = 25 * 1024 * 1024;
+  var A = "http://schemas.openxmlformats.org/drawingml/2006/main";
+  var WP = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing";
+  var VML = "urn:schemas-microsoft-com:vml";
+  var MAX_MEDIA_TOTAL = 40 * 1024 * 1024;
+  var IMG_TYPES = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", bmp: "image/bmp" };
   var WANTED = /* @__PURE__ */ new Set(["word/document.xml", "word/_rels/document.xml.rels", "word/numbering.xml"]);
   var kids = (n, name) => Array.from(n.childNodes).filter((c) => c.nodeType === 1 && c.namespaceURI === W && c.localName === name);
   var kid = (n, name) => kids(n, name)[0] || null;
@@ -527,8 +532,44 @@
       if (c.localName === "t") wrap.appendChild(document.createTextNode(c.textContent));
       else if (c.localName === "tab") wrap.appendChild(document.createTextNode("\xA0\xA0\xA0\xA0"));
       else if (c.localName === "br" || c.localName === "cr") wrap.appendChild(el("br"));
-      else if (c.localName === "drawing" || c.localName === "pict") state.images++;
+      else if (c.localName === "drawing" || c.localName === "pict") renderImage(c, wrap, state);
     });
+  }
+  function renderImage(node, parent, state) {
+    let rid = null, alt = "", width = 0;
+    const blip = node.getElementsByTagNameNS(A, "blip")[0];
+    if (blip) {
+      rid = blip.getAttributeNS(R, "embed") || blip.getAttribute("r:embed");
+      const ext = node.getElementsByTagNameNS(WP, "extent")[0];
+      const cx = ext ? parseInt(ext.getAttribute("cx") || "0", 10) : 0;
+      width = cx > 0 ? Math.round(cx / 9525) : 0;
+      const pr = node.getElementsByTagNameNS(WP, "docPr")[0];
+      alt = pr && (pr.getAttribute("descr") || pr.getAttribute("title")) || "";
+    } else {
+      const im = node.getElementsByTagNameNS(VML, "imagedata")[0];
+      if (im) {
+        rid = im.getAttributeNS(R, "id") || im.getAttribute("r:id");
+        alt = im.getAttribute("o:title") || "";
+      }
+    }
+    const rel = rid && state.rels.get(rid);
+    const name = rel && !rel.external ? "word/" + rel.target.replace(/^\/?(word\/)?/, "") : null;
+    const data = name && state.media[name];
+    const type = name && IMG_TYPES[name.split(".").pop().toLowerCase()];
+    if (!data || !type) {
+      state.images++;
+      return;
+    }
+    const url = URL.createObjectURL(new Blob([data], { type }));
+    state.urls.push(url);
+    const img = el("img");
+    img.src = url;
+    img.alt = alt;
+    img.loading = "lazy";
+    if (width > 0 && width < 4e3) img.style.width = width + "px";
+    img.style.maxWidth = "100%";
+    img.style.height = "auto";
+    parent.appendChild(img);
   }
   function renderInline(node, parent, state) {
     Array.from(node.childNodes).forEach((c) => {
@@ -538,7 +579,8 @@
           renderRun(c, parent, state);
           break;
         case "hyperlink": {
-          const target = state.rels.get(c.getAttributeNS(R, "id") || c.getAttribute("r:id"));
+          const rel = state.rels.get(c.getAttributeNS(R, "id") || c.getAttribute("r:id"));
+          const target = rel && rel.external ? rel.target : null;
           if (target && /^(https?:\/\/|mailto:)/i.test(target)) {
             const a = el("a");
             a.href = target;
@@ -638,23 +680,33 @@
     return wrap;
   }
   function docxToElement(buf) {
-    const files = unzipSync(new Uint8Array(buf), { filter: (f) => WANTED.has(f.name) && f.originalSize <= MAX_PART });
+    let mediaBudget = MAX_MEDIA_TOTAL;
+    const files = unzipSync(new Uint8Array(buf), {
+      filter: (f) => {
+        if (WANTED.has(f.name)) return f.originalSize <= MAX_PART;
+        if (f.name.startsWith("word/media/") && IMG_TYPES[f.name.split(".").pop().toLowerCase()] && f.originalSize <= mediaBudget) {
+          mediaBudget -= f.originalSize;
+          return true;
+        }
+        return false;
+      }
+    });
     const main = files["word/document.xml"];
     if (!main) throw new Error("not a Word document (word/document.xml missing)");
     const rels = /* @__PURE__ */ new Map();
     if (files["word/_rels/document.xml.rels"]) {
       Array.from(parseXml(files["word/_rels/document.xml.rels"]).getElementsByTagName("Relationship")).forEach((r) => {
-        if (r.getAttribute("TargetMode") === "External") rels.set(r.getAttribute("Id"), r.getAttribute("Target"));
+        rels.set(r.getAttribute("Id"), { target: r.getAttribute("Target") || "", external: r.getAttribute("TargetMode") === "External" });
       });
     }
-    const state = { rels, numbering: numberingMap(files["word/numbering.xml"] ? parseXml(files["word/numbering.xml"]) : null), images: 0 };
+    const state = { rels, numbering: numberingMap(files["word/numbering.xml"] ? parseXml(files["word/numbering.xml"]) : null), images: 0, media: files, urls: [] };
     const doc = parseXml(main);
     const root = el("div");
     root.className = "kap-doc";
     const body = doc.getElementsByTagNameNS(W, "body")[0];
     if (!body) throw new Error("document has no body");
     renderBlocks(body, root, state);
-    return { root, images: state.images };
+    return { root, images: state.images, urls: state.urls };
   }
 
   // src/index.js
@@ -772,6 +824,9 @@
     function closeModal() {
       if (!modal) return;
       if (modal.url) URL.revokeObjectURL(modal.url);
+      modal.docUrls.forEach(function(u) {
+        URL.revokeObjectURL(u);
+      });
       document.removeEventListener("keydown", modal.onKey, true);
       modal.shade.remove();
       modal = null;
@@ -810,7 +865,7 @@
       box.append(head, body);
       shade.append(box);
       document.body.appendChild(shade);
-      const state = { shade, url: null, idx: index, seq: 0, blob: null, onKey: null };
+      const state = { shade, url: null, idx: index, seq: 0, blob: null, onKey: null, docUrls: [] };
       modal = state;
       function note(text, isErr) {
         body.replaceChildren(el2("div", "kap-note" + (isErr ? " kap-note-err" : ""), text));
@@ -824,6 +879,10 @@
           URL.revokeObjectURL(state.url);
           state.url = null;
         }
+        state.docUrls.forEach(function(u) {
+          URL.revokeObjectURL(u);
+        });
+        state.docUrls = [];
         state.blob = null;
         title.textContent = att.filename;
         title.title = att.filename;
@@ -863,9 +922,10 @@
                 note("Could not render this document (" + (err2 && err2.message || err2) + "). Use Download.", true);
                 return;
               }
+              state.docUrls = res.urls;
               res.root.setAttribute("data-testid", "kap-docx");
               body.replaceChildren(res.root);
-              if (res.images) body.appendChild(el2("div", "kap-note", res.images + " image(s) not shown. Download for the full document."));
+              if (res.images) body.appendChild(el2("div", "kap-note", res.images + " image(s) in an unsupported format were not shown. Download for the full document."));
             });
           }
           const typed = new Blob([raw], { type: blobType(kind, att) });

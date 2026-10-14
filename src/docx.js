@@ -1,12 +1,18 @@
 // Minimal .docx -> DOM renderer (paragraphs, headings, inline formatting, links,
 // lists, tables). Built with DOM APIs and textContent only, so document text can
-// never become markup. Images, headers/footers, footnotes and tracked deletions
-// are not rendered. Not a layout engine: it is a readable preview.
+// never become markup. PNG/JPEG/GIF/WebP/BMP images are shown; other image
+// formats, headers/footers, footnotes and tracked deletions are not. Not a layout engine: it is a readable preview.
 import { unzipSync, strFromU8 } from "fflate";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 const MAX_PART = 25 * 1024 * 1024;
+const A = "http://schemas.openxmlformats.org/drawingml/2006/main";
+const WP = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing";
+const VML = "urn:schemas-microsoft-com:vml";
+const MAX_MEDIA_TOTAL = 40 * 1024 * 1024;
+// Only raster formats a browser renders safely; SVG/EMF/WMF are skipped.
+const IMG_TYPES = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", bmp: "image/bmp" };
 const WANTED = new Set(["word/document.xml", "word/_rels/document.xml.rels", "word/numbering.xml"]);
 
 const kids = (n, name) => Array.from(n.childNodes).filter((c) => c.nodeType === 1 && c.namespaceURI === W && c.localName === name);
@@ -62,8 +68,36 @@ function renderRun(run, parent, state) {
     if (c.localName === "t") wrap.appendChild(document.createTextNode(c.textContent));
     else if (c.localName === "tab") wrap.appendChild(document.createTextNode("    "));
     else if (c.localName === "br" || c.localName === "cr") wrap.appendChild(el("br"));
-    else if (c.localName === "drawing" || c.localName === "pict") state.images++;
+    else if (c.localName === "drawing" || c.localName === "pict") renderImage(c, wrap, state);
   });
+}
+
+function renderImage(node, parent, state) {
+  let rid = null, alt = "", width = 0;
+  const blip = node.getElementsByTagNameNS(A, "blip")[0];
+  if (blip) {
+    rid = blip.getAttributeNS(R, "embed") || blip.getAttribute("r:embed");
+    const ext = node.getElementsByTagNameNS(WP, "extent")[0];
+    const cx = ext ? parseInt(ext.getAttribute("cx") || "0", 10) : 0;
+    width = cx > 0 ? Math.round(cx / 9525) : 0;
+    const pr = node.getElementsByTagNameNS(WP, "docPr")[0];
+    alt = (pr && (pr.getAttribute("descr") || pr.getAttribute("title"))) || "";
+  } else {
+    const im = node.getElementsByTagNameNS(VML, "imagedata")[0];
+    if (im) { rid = im.getAttributeNS(R, "id") || im.getAttribute("r:id"); alt = im.getAttribute("o:title") || ""; }
+  }
+  const rel = rid && state.rels.get(rid);
+  const name = rel && !rel.external ? "word/" + rel.target.replace(/^\/?(word\/)?/, "") : null;
+  const data = name && state.media[name];
+  const type = name && IMG_TYPES[name.split(".").pop().toLowerCase()];
+  if (!data || !type) { state.images++; return; }
+  const url = URL.createObjectURL(new Blob([data], { type }));
+  state.urls.push(url);
+  const img = el("img");
+  img.src = url; img.alt = alt; img.loading = "lazy";
+  if (width > 0 && width < 4000) img.style.width = width + "px";
+  img.style.maxWidth = "100%"; img.style.height = "auto";
+  parent.appendChild(img);
 }
 
 function renderInline(node, parent, state) {
@@ -72,7 +106,8 @@ function renderInline(node, parent, state) {
     switch (c.localName) {
       case "r": renderRun(c, parent, state); break;
       case "hyperlink": {
-        const target = state.rels.get(c.getAttributeNS(R, "id") || c.getAttribute("r:id"));
+        const rel = state.rels.get(c.getAttributeNS(R, "id") || c.getAttribute("r:id"));
+        const target = rel && rel.external ? rel.target : null;
         if (target && /^(https?:\/\/|mailto:)/i.test(target)) {
           const a = el("a");
           a.href = target; a.target = "_blank"; a.rel = "noopener noreferrer";
@@ -158,23 +193,30 @@ function renderTable(tbl, state) {
   return wrap;
 }
 
-// -> { root: HTMLElement, images: number }; throws on anything that isn't a readable .docx
+// -> { root: HTMLElement, images: number (skipped), urls: string[] (blob URLs to revoke) }; throws on anything that isn't a readable .docx
 export function docxToElement(buf) {
-  const files = unzipSync(new Uint8Array(buf), { filter: (f) => WANTED.has(f.name) && f.originalSize <= MAX_PART });
+  let mediaBudget = MAX_MEDIA_TOTAL;
+  const files = unzipSync(new Uint8Array(buf), {
+    filter: (f) => {
+      if (WANTED.has(f.name)) return f.originalSize <= MAX_PART;
+      if (f.name.startsWith("word/media/") && IMG_TYPES[f.name.split(".").pop().toLowerCase()] && f.originalSize <= mediaBudget) { mediaBudget -= f.originalSize; return true; }
+      return false;
+    },
+  });
   const main = files["word/document.xml"];
   if (!main) throw new Error("not a Word document (word/document.xml missing)");
   const rels = new Map();
   if (files["word/_rels/document.xml.rels"]) {
     Array.from(parseXml(files["word/_rels/document.xml.rels"]).getElementsByTagName("Relationship")).forEach((r) => {
-      if (r.getAttribute("TargetMode") === "External") rels.set(r.getAttribute("Id"), r.getAttribute("Target"));
+      rels.set(r.getAttribute("Id"), { target: r.getAttribute("Target") || "", external: r.getAttribute("TargetMode") === "External" });
     });
   }
-  const state = { rels, numbering: numberingMap(files["word/numbering.xml"] ? parseXml(files["word/numbering.xml"]) : null), images: 0 };
+  const state = { rels, numbering: numberingMap(files["word/numbering.xml"] ? parseXml(files["word/numbering.xml"]) : null), images: 0, media: files, urls: [] };
   const doc = parseXml(main);
   const root = el("div");
   root.className = "kap-doc";
   const body = doc.getElementsByTagNameNS(W, "body")[0];
   if (!body) throw new Error("document has no body");
   renderBlocks(body, root, state);
-  return { root, images: state.images };
+  return { root, images: state.images, urls: state.urls };
 }

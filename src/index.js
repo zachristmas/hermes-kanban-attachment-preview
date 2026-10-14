@@ -94,6 +94,7 @@ import { docxToElement } from "./docx.js";
   function closeModal() {
     if (!modal) return;
     if (modal.url) URL.revokeObjectURL(modal.url);
+    modal.docUrls.forEach(function (u) { URL.revokeObjectURL(u); });
     document.removeEventListener("keydown", modal.onKey, true);
     modal.shade.remove();
     modal = null;
@@ -126,7 +127,7 @@ import { docxToElement } from "./docx.js";
     shade.append(box);
     document.body.appendChild(shade);
 
-    const state = { shade: shade, url: null, idx: index, seq: 0, blob: null, onKey: null };
+    const state = { shade: shade, url: null, idx: index, seq: 0, blob: null, onKey: null, docUrls: [] };
     modal = state;
 
     function note(text, isErr) {
@@ -139,6 +140,8 @@ import { docxToElement } from "./docx.js";
       const att = list[i];
       const seq = ++state.seq;
       if (state.url) { URL.revokeObjectURL(state.url); state.url = null; }
+      state.docUrls.forEach(function (u) { URL.revokeObjectURL(u); });
+      state.docUrls = [];
       state.blob = null;
       title.textContent = att.filename;
       title.title = att.filename;
@@ -170,9 +173,10 @@ import { docxToElement } from "./docx.js";
               if (modal !== state || seq !== state.seq) return;
               let res;
               try { res = docxToElement(buf); } catch (err) { note("Could not render this document (" + (err && err.message || err) + "). Use Download.", true); return; }
+              state.docUrls = res.urls;
               res.root.setAttribute("data-testid", "kap-docx");
               body.replaceChildren(res.root);
-              if (res.images) body.appendChild(el("div", "kap-note", res.images + " image(s) not shown. Download for the full document."));
+              if (res.images) body.appendChild(el("div", "kap-note", res.images + " image(s) in an unsupported format were not shown. Download for the full document."));
             });
           }
           const typed = new Blob([raw], { type: blobType(kind, att) });
