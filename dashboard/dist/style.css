@@ -82,3 +82,27 @@
 }
 .kap-note { padding: 1rem; color: var(--color-muted-foreground); font-size: 0.85rem; text-align: center; }
 .kap-note-err { color: var(--color-destructive, #f66); }
+
+/* Word (.docx) preview: a readable "page" regardless of dashboard theme. */
+.kap-body:has(> .kap-doc) { display: block; background: color-mix(in srgb, var(--color-foreground, #000) 8%, var(--color-background, #111)); }
+.kap-doc {
+  box-sizing: border-box;
+  max-width: 820px;
+  margin: 1rem auto;
+  padding: 2rem 2.4rem;
+  background: #fff;
+  color: #1a1a1a;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.kap-doc p { margin: 0 0 0.7em; }
+.kap-doc h1, .kap-doc h2, .kap-doc h3, .kap-doc h4, .kap-doc h5, .kap-doc h6 { margin: 1.1em 0 0.4em; line-height: 1.25; }
+.kap-doc h1 { font-size: 1.6em; } .kap-doc h2 { font-size: 1.3em; } .kap-doc h3 { font-size: 1.15em; }
+.kap-doc ul, .kap-doc ol { margin: 0 0 0.7em; padding-left: 1.6em; }
+.kap-doc ul { list-style: disc; } .kap-doc ol { list-style: decimal; }
+.kap-doc a { color: #0b57d0; text-decoration: underline; }
+.kap-doc-table { overflow-x: auto; margin: 0 0 0.8em; }
+.kap-doc table { border-collapse: collapse; }
+.kap-doc td { border: 1px solid #bbb; padding: 0.3em 0.6em; vertical-align: top; }
