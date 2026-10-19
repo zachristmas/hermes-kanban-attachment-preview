@@ -49,9 +49,10 @@ The kanban drawer exposes no plugin slots and its attachment rows carry no id, s
 
 ### Safety
 
-Attachments are untrusted content, so nothing is ever rendered as HTML:
+Attachments are untrusted content, so previews constrain what can be rendered:
 
-- Text goes into the page via `textContent`, including `.html` files.
+- Plain-text files go into the page via `textContent`, including `.html` files. Markdown files use a sanitized renderer; raw HTML is inert/removed, images are not fetched, and links are limited to HTTP(S).
+- Markdown Mermaid fences render as diagrams with Mermaid's strict security mode; invalid diagrams remain visible as source.
 - SVG is shown through an `<img>` tag, so embedded scripts do not run.
 - Blob types come from a fixed allow-list (PDFs are forced to `application/pdf`), never from the stored type alone.
 

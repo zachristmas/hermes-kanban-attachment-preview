@@ -4,10 +4,12 @@
 // The built-in drawer has no plugin slots and its rows carry no attachment id,
 // so rows are matched to the task's attachment list by filename + size. Files
 // are fetched with SDK.authedFetch (the dashboard needs auth on every request)
-// and shown from blob URLs. Nothing is ever rendered as HTML: text goes in via
-// textContent, SVG goes through <img>, and the blob type is forced from a
-// fixed allow-list.
+// and shown from blob URLs. Markdown is sanitized before insertion; other text
+// stays textContent, SVG goes through <img>, and blob types are constrained.
 import { docxToElement } from "./docx.js";
+import { Marked } from "marked";
+import mermaid from "mermaid";
+import DOMPurify from "dompurify";
 
 (function () {
   "use strict";
@@ -16,6 +18,9 @@ import { docxToElement } from "./docx.js";
   const API = "/api/plugins/kanban";
   const LS_BOARD_KEY = "hermes.kanban.selectedBoard"; // same key the kanban plugin writes
   const TEXT_LIMIT = 512 * 1024;
+  const markdown = new Marked({ gfm: true, breaks: false, renderer: { html: function () { return ""; } } });
+  let mermaidReady = false;
+  let mermaidSequence = 0;
 
   const TEXT_EXT = new Set([
     "txt", "md", "markdown", "log", "json", "jsonl", "yaml", "yml", "toml", "ini", "cfg", "conf",
@@ -105,6 +110,56 @@ import { docxToElement } from "./docx.js";
     return ZOOM_DEFAULT;
   }
   function writeZoom(v) { try { window.localStorage.setItem(ZOOM_KEY, String(v)); } catch (_e) { /* ignore */ } }
+
+  // Attachment content is untrusted: allow-list sanitized markup, disallow
+  // network-backed images/raw HTML, and constrain links before making them active.
+  function renderMarkdown(source) {
+    const html = markdown.parse(source, { async: false });
+    const safe = DOMPurify.sanitize(html, {
+      USE_PROFILES: { html: true },
+      FORBID_TAGS: ["img", "svg", "math", "style", "iframe", "object", "embed", "form", "input", "video", "audio"],
+      FORBID_ATTR: ["style", "src", "srcset", "xlink:href"],
+      ALLOW_DATA_ATTR: false,
+    });
+    const template = document.createElement("template");
+    template.innerHTML = safe;
+    template.content.querySelectorAll("a").forEach(function (a) {
+      const href = a.getAttribute("href");
+      if (!href || !href.trim()) { a.removeAttribute("href"); return; }
+      let url;
+      try { url = new URL(href, window.location.href); } catch (_e) { a.removeAttribute("href"); return; }
+      if (url.protocol !== "http:" && url.protocol !== "https:") a.removeAttribute("href");
+      else { a.href = url.href; a.target = "_blank"; a.rel = "noopener noreferrer"; }
+    });
+    return template.content;
+  }
+
+  async function renderMarkdownDiagrams(container) {
+    const blocks = Array.from(container.querySelectorAll("pre > code.language-mermaid, pre > code.lang-mermaid"));
+    if (!blocks.length) return;
+    if (!mermaidReady) {
+      mermaid.initialize({
+        startOnLoad: false, securityLevel: "strict", theme: "default", htmlLabels: false,
+        suppressErrorRendering: true,
+        secure: ["secure", "securityLevel", "startOnLoad", "maxTextSize", "maxEdges", "suppressErrorRendering", "htmlLabels", "flowchart"],
+      });
+      mermaidReady = true;
+    }
+    for (const code of blocks) {
+      if (!container.isConnected) return;
+      const pre = code.parentElement;
+      const id = "kap-mermaid-" + (++mermaidSequence);
+      try {
+        const result = await mermaid.render(id, code.textContent || "");
+        if (!container.isConnected) return;
+        const svg = DOMPurify.sanitize(result.svg, { USE_PROFILES: { svg: true, svgFilters: true }, ADD_TAGS: ["marker"], FORBID_TAGS: ["foreignObject"] });
+        const holder = document.createElement("div");
+        holder.className = "kap-mermaid";
+        holder.innerHTML = svg;
+        pre.replaceWith(holder);
+      } catch (_e) { /* Preserve invalid diagram source in its code block. */ }
+    }
+  }
 
   function board() {
     try { return (window.localStorage.getItem(LS_BOARD_KEY) || "").trim() || null; } catch (_e) { return null; }
@@ -232,6 +287,15 @@ import { docxToElement } from "./docx.js";
           if (kind === "text") {
             return raw.slice(0, TEXT_LIMIT).text().then(function (txt) {
               if (modal !== state || seq !== state.seq) return;
+              if (ext(att.filename) === "md" || ext(att.filename) === "markdown") {
+                const rendered = el("article", "kap-markdown");
+                rendered.setAttribute("data-testid", "kap-markdown");
+                rendered.appendChild(renderMarkdown(txt));
+                body.replaceChildren(rendered);
+                renderMarkdownDiagrams(rendered).catch(function () { /* Keep Markdown usable if diagram rendering fails. */ });
+                if (raw.size > TEXT_LIMIT) body.appendChild(el("div", "kap-note", "Showing the first " + fmtBytes(TEXT_LIMIT) + ". Download for the full file."));
+                return;
+              }
               const pre = el("pre", "kap-text", txt);
               pre.setAttribute("data-testid", "kap-text");
               body.replaceChildren(pre);
